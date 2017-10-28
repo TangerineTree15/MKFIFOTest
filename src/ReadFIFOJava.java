@@ -1,64 +1,98 @@
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.io.FileReader;
 
+//mkfifo filename (mkfifo /tmp/sbfifo)
 public class ReadFIFOJava {
-   private static final String FIFO = "/tmp/testfifo";
+    interface Callback<T> {
+        void onMessage(T t);
+        void onStop();
+    }
+    
+	private static ReadFIFOJava readFIFOJava;	
 
-   public static void main(String[] args){
-//      BufferedReader in = null;
-//      try{
-//         System.out.println("JAVA SIDE!!");
-//         in = new BufferedReader(new FileReader(FIFO));
-//         while(in.ready()){
-//             System.out.println(in.readLine());
-//         }
-//         //done, however you can choose to cycle over this line
-//         //in this thread or launch another to check for new input
-//         in.close();
-//         System.out.println("JAVA CLOSE!!");
-//      }catch(IOException ex){
-//         System.err.println("IO Exception at buffered read!!");
-//         System.exit(-1);
-//      } catch(Exception e) {
-//    	  	 System.err.println("Exception at buffered read!!");
-//      }
-	   
-	   
+	private final static String defFilePath = "/tmp/sbfifo";
+	private String filePath = defFilePath;
+	private File  f_pipe;
+	RandomAccessFile raf;
+	
+	public static ReadFIFOJava getInstance() {
+		return getInstance(defFilePath);
+	}
+	public static ReadFIFOJava getInstance(String filepath) {
+       if (readFIFOJava == null) {
+           synchronized (ReadFIFOJava.class) {
+               if (readFIFOJava == null) {
+            	   readFIFOJava = new ReadFIFOJava(filepath);
+               }
+           }
+       }
+       return readFIFOJava;
+	}
+	
+	public ReadFIFOJava(String filePath) {
+		setFilepath(filePath);
+	}
+	
+	private void reAccessFile() throws FileNotFoundException {
+		if(f_pipe==null) setFilepath(filePath);
+		if(raf==null) raf = new RandomAccessFile(f_pipe, "r");
+	}
+	
+	private void closeFile() throws IOException {
+		raf.close();
+	}
+	public String getFilepath() {
+		return filePath;
+	}
+
+	public void setFilepath(String filePath) {
+		if(filePath == null) {
+			this.filePath = defFilePath;
+		} else {
+			this.filePath = filePath;
+		}
+		f_pipe = new File ( this.filePath );
+	}
+   
+   
+	public void readMessage(Callback<String> callback) throws FileNotFoundException, IOException {
+		reAccessFile();
+		String line=null;  
+		for( ;; ){
+			line=raf.readLine();                  
+			if( line!=null && !line.equals("stop") ) {
+				if(callback!=null) callback.onMessage(line);
+			}else{
+				if(callback!=null) callback.onStop();
+				break; //stop reading loop
+			}
+		}
+		closeFile();
+	}
+	
+   
+   public static void main(String[] args){	   
 	   try {
-		   readNonStop();
+		   ReadFIFOJava readFIFOJava = ReadFIFOJava.getInstance();
+		   readFIFOJava.readMessage(new Callback<String>() {
+			   @Override
+			   public void onMessage(String msg) {
+				   System.out.println(msg);
+			   }
+			   
+			   @Override
+			   public void onStop() {
+				   System.out.println("onStop");
+			   }			   
+		   });
+	   } catch (FileNotFoundException e) {
+		   e.printStackTrace();
 	   } catch (IOException e) {
-		   // TODO Auto-generated catch block
 		   e.printStackTrace();
 	   }
 
-   }
-
-   
- //PipeProcessor pipeProcessor; 
-   
-   private static void  readNonStop() throws IOException{
-	   File  f_pipe = new File ( "/tmp/testfifo" );     
-	   for(;;){
-		   RandomAccessFile raf = new RandomAccessFile(f_pipe, "r");//p.1
-		   String line=null;  
-		   for( ;; ){
-			   line=raf.readLine();                  
-			   
-			   //Take care to check the line -
-			   //it is null when the pipe has no more available data. 
-			   if( line!=null ) {
-//                            pipeProcessor.process( line ); 
-				   System.out.println(line);
-			   }else{
-				   break; //stop reading loop
-			   }
-		   }
-		   //here - we got NULL line, re-open the RandomAccessFile  again 
-	   }
    }
 
 }
